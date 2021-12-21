@@ -341,8 +341,7 @@ induction z.
   move => eql.
   rewrite IHz // distributivitity.
   apply esym.
-  rewrite -addnA // eql.
-  by rewrite (addnC result (carry*wsize)) // addnA.
+  by rewrite -addnA // eql // (addnC result (carry*wsize)) // addnA.
 Defined.
 
 Fixpoint bnadd_aux (z1 z2 : bignum) (c : bool) : bignum :=
@@ -354,6 +353,13 @@ Fixpoint bnadd_aux (z1 z2 : bignum) (c : bool) : bignum :=
       w::(bnadd_aux z3 z4 carry)
   end.
 
+Lemma long_associativity_1 (a b c d e : nat):
+  a + b + (c + d) + e = b + d + e + a + c.
+Proof. ring. Qed.
+
+Lemma long_associativity_2 (a b c d : nat): a + b + c + d = c + d + a + b.
+Proof. ring. Qed.
+
 Lemma bnadd_aux_correct (z1 z2 : bignum) (c : bool): 
   bn2nat (bnadd_aux z1 z2 c) = bn2nat z1 + bn2nat z2 + c.
 Proof.
@@ -362,16 +368,42 @@ induction z1.
 + induction z2.
   ++ intros c; case: c; simpl; by rewrite towordK // mul0n // !add0n.
   ++ intros c.
-     case: c.
      simpl.
-     case e: (word_add_with_carry a (inord 0) true) => [c r].
-     move: (word_add_with_carry_correct a (inord 0) true).
+     case e: (word_add_with_carry a (inord 0) c) => [carry result].
+     move: (word_add_with_carry_correct a (inord 0) c).
      rewrite e.
      simpl.
      rewrite bn_carry_correct // towordK // addn0.
      move => eql.
+     rewrite distributivitity // add0n.
+     apply esym.
+     by rewrite -addnA // eql // (addnC result (carry*wsize)) // addnA.
++ induction z2.
+  ++ intros c.
+     simpl.
+     case e: (word_add_with_carry a (inord 0) c) => [carry result].
+     move: (word_add_with_carry_correct a (inord 0) c).
+     rewrite e.
+     simpl.
+     rewrite bn_carry_correct // towordK.
+     rewrite addnACl // add0n // addnC.
+     move => eql.
      rewrite distributivitity.
-Admitted.
+     apply esym.
+     rewrite addnACl // add0n // -addnACl // eql // addnCAC.
+     exact.
+     exact.
+  ++ intros c.
+     simpl. 
+     case e: (word_add_with_carry a a0 c) => [carry result].
+     move: (word_add_with_carry_correct a a0 c).
+     rewrite e.
+     simpl.
+     rewrite IHz1.
+     move => eql.
+     rewrite distributivitity // distributivitity // long_associativity_1 // eql // (addnC result (carry*wsize)) // long_associativity_2.
+     exact.
+Qed.
 
 Definition bnadd (z1 z2 : bignum) : bignum := (bnadd_aux z1 z2 false).
 
