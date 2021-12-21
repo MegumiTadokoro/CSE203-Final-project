@@ -152,7 +152,7 @@ Proof. by case: w => /= w; rewrite !prednK // ltn_predRL. Qed.
 Fixpoint bn2nat (z : bignum) : nat :=
   match z with
   | nil => 0
-  | cons z_0 s => (bn2nat s) * wsize + z_0
+  | z_0::s => (bn2nat s) * wsize + nat_of_ord(z_0)
   end.  
 
 (* 2. Implement the function `nat2bn` s.t. `nat2bn n` computes the       *)
@@ -178,7 +178,6 @@ have := leq_divDl wsize p.+1 1; rewrite addn1.
 move/leq_trans; apply; rewrite [1%/_]divn_small //.
 rewrite addn0 addn1; apply: ltn_Pdiv => //.
 Qed.	
-
 
 Fixpoint nat2bn_aux (depth : nat) (n : nat) : bignum :=
   match depth, n with
@@ -312,18 +311,44 @@ Axiom word_add_with_carry_correct :
 (* 4. Implement the function `bnadd` that computes the addition of two   *)
 (*    bignums, using the algorithm given above.                          *)
 
+Fixpoint bn_carry (z : bignum) (c : bool) : bignum:=
+  match z with
+  | nil => [::(toword c)]
+  | z_0 :: z_rest =>
+    let: (carry, res) := (word_add_with_carry z_0 (toword 0) c) in
+      res::(bn_carry z_rest carry)
+  end.
+
+Lemma distributivitity (a b c : nat): (a + b)*c = a*c + b*c.
+Proof. ring. Qed.
+
+Lemma bn_carry_correct (z : bignum) (c : bool):
+  bn2nat (bn_carry z c) = bn2nat z + c.
+Proof.
+move: c.
+induction z.
++ simpl.
+  rewrite mul0n.
+  intros c.
+  case: c; simpl; by rewrite towordK // mul0n // !add0n.
++ simpl.
+  intros c.
+  case e: (word_add_with_carry a (inord 0) c) => [carry result].
+  move: (word_add_with_carry_correct a (inord 0) c).
+  rewrite e.
+  simpl.
+  rewrite towordK // addn0.
+  move => eql.
+  rewrite IHz // distributivitity.
+  apply esym.
+  rewrite -addnA // eql.
+  by rewrite (addnC result (carry*wsize)) // addnA.
+Defined.
+
 Fixpoint bnadd_aux (z1 z2 : bignum) (c : bool) : bignum :=
   match z1, z2 with
-  | _, nil => 
-    match c with 
-    | true => app z1 [::(toword 1)]
-    | false => z1
-    end
-  | nil, _ => 
-    match c with 
-    | true => app z2 [::(toword 1)]
-    | false => z2
-    end
+  | _, nil => bn_carry z1 c
+  | nil, _ => bn_carry z2 c
   | a :: z3, b :: z4 => 
     let: (carry, w) := (word_add_with_carry a b c) in
       w::(bnadd_aux z3 z4 carry)
@@ -332,15 +357,20 @@ Fixpoint bnadd_aux (z1 z2 : bignum) (c : bool) : bignum :=
 Lemma bnadd_aux_correct (z1 z2 : bignum) (c : bool): 
   bn2nat (bnadd_aux z1 z2 c) = bn2nat z1 + bn2nat z2 + c.
 Proof.
-move: z2.
+move: z2 c.
 induction z1.
 + induction z2.
-  ++ case: c.
-     +++ simpl.
-         by rewrite towordK // mul0n // !add0n.
-     +++ exact.
-  ++ move: IHz2.
-     case: c. 
+  ++ intros c; case: c; simpl; by rewrite towordK // mul0n // !add0n.
+  ++ intros c.
+     case: c.
+     simpl.
+     case e: (word_add_with_carry a (inord 0) true) => [c r].
+     move: (word_add_with_carry_correct a (inord 0) true).
+     rewrite e.
+     simpl.
+     rewrite bn_carry_correct // towordK // addn0.
+     move => eql.
+     rewrite distributivitity.
 Admitted.
 
 Definition bnadd (z1 z2 : bignum) : bignum := (bnadd_aux z1 z2 false).
@@ -349,14 +379,7 @@ Definition bnadd (z1 z2 : bignum) : bignum := (bnadd_aux z1 z2 false).
 
 Lemma bnadd_correct (z1 z2 : bignum): 
   bn2nat (bnadd z1 z2) = bn2nat z1 + bn2nat z2.
-Proof.
-move: z2.
-induction z1.
-+ induction z2; exact.
-+ induction z2.
-  ++ by rewrite addn0.
-  ++   
-Admitted.
+Proof. by rewrite bnadd_aux_correct // addn0. Qed.
 
 (* ===================================================================== *)
 (* Multiplication of bignums                                             *)
