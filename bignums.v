@@ -109,6 +109,9 @@ Qed.
 Lemma ofwordK (w : word) : toword (nat_of_ord w) = w.
 Proof. by rewrite inord_val. Qed.
 
+Lemma ltn_nat_of_ord (w : word) : nat_of_ord w < wsize.
+Proof. by case: w => /= w; rewrite !prednK // ltn_predRL. Qed.
+
 (* --------------------------------------------------------------------- *)
 (* In the course of this project, you might want to use the following    *)
 (* lemmas about natural integer arithmetic:                              *)
@@ -229,16 +232,23 @@ Qed.
 Definition canon (z : bignum) :=
   if rev z is x :: _ then x != 0%R else true.
 
-Compute (canon [::inord(1)]).
+Fixpoint canon_alt (z : bignum) :=
+  match z with
+  | nil => true
+  | a :: nil => 
+    match val a with  
+    | 0 => false
+    | S _ => true
+    end
+  | a :: z' => canon_alt z'
+  end.
 
 Lemma bn2natK (z : bignum) :
-  canon z -> nat2bn (bn2nat z) = z.
+  canon_alt z -> nat2bn (bn2nat z) = z.
 Proof.
 induction z.
-+ simpl.
-  exact.
-+ simpl.
-  move => H.
++ exact.
++ 
 Admitted.
 
 (* ===================================================================== *)
@@ -315,19 +325,37 @@ Fixpoint bnadd_aux (z1 z2 : bignum) (c : bool) : bignum :=
     | false => z2
     end
   | a :: z3, b :: z4 => 
-    match (word_add_with_carry a b c) with
-    | (carry, w) => w::(bnadd_aux z3 z4 carry)
-    end
+    let: (carry, w) := (word_add_with_carry a b c) in
+      w::(bnadd_aux z3 z4 carry)
   end.
+
+Lemma bnadd_aux_correct (z1 z2 : bignum) (c : bool): 
+  bn2nat (bnadd_aux z1 z2 c) = bn2nat z1 + bn2nat z2 + c.
+Proof.
+move: z2.
+induction z1.
++ induction z2.
+  ++ case: c.
+     +++ simpl.
+         by rewrite towordK // mul0n // !add0n.
+     +++ exact.
+  ++ move: IHz2.
+     case: c. 
+Admitted.
 
 Definition bnadd (z1 z2 : bignum) : bignum := (bnadd_aux z1 z2 false).
 
 (* 5. Prove that `bnadd` is correct, as stated below.                    *)
 
-Lemma bnadd_correct (z1 z2 : bignum) :
+Lemma bnadd_correct (z1 z2 : bignum): 
   bn2nat (bnadd z1 z2) = bn2nat z1 + bn2nat z2.
 Proof.
-
+move: z2.
+induction z1.
++ induction z2; exact.
++ induction z2.
+  ++ by rewrite addn0.
+  ++   
 Admitted.
 
 (* ===================================================================== *)
@@ -369,9 +397,9 @@ Admitted.
 (*                                                                       *)
 (*  proc dword_mul_with_carry (w1 : word, w2 : word, carry : word) {     *)
 (*    w1, w2 <- dword_mul(w1, w2)                                        *)
-(*    c , w1 <- wordÂ addÂ with_carry(w1, carry, false)                    *)
+(*    c , w1 <- word_add_with_carry(w1, carry, false)                    *)
 (*    if (c) {                                                           *)
-(*      _, w2 <- wordÂ addÂ withÂ carry(w2, 1, false)                       *)
+(*      _, w2 <- word_add_with_carry(w2, 1, false)                       *)
 (*    }                                                                  *)
 (*    return (w1, w2)                                                    *)
 (*  }                                                                    *)
@@ -403,22 +431,17 @@ Fixpoint bnshift (z : bignum) (n : nat) : bignum :=
   end.
 
 Definition dword_mul_with_carry (w1 w2 c : word) : word * word :=
-  let: (w1, w2) := 
-    dword_mul w1 w2 in
-    let: (c, w1) := 
-      word_add_with_carry w1 c false in
-      match c with
-      | true =>
-        let: (_, w2) := 
-          word_add_with_carry w2 (inord(1)) false in (w1, w2)
-      | false => (w1, w2)
-      end.
-
-Definition bnmull_aux (z : bignum) (w : word) (c : bool) : bignum :=
-  let: aout := nil in nil.
+  let: (w1, w2) := dword_mul w1 w2 in
+  let: (c, w1) := word_add_with_carry w1 c false in
+  match c with
+  | true =>
+    let: (_, w2) := 
+      word_add_with_carry w2 (inord(1)) false in (w1, w2)
+  | false => (w1, w2)
+  end.
 
 Definition bnmul1 (z : bignum) (w : word) : bignum :=
-  let:
+  [::].
 
 Definition bnmul (z1 z2 : bignum) : bignum :=
   [::].
@@ -427,7 +450,10 @@ Definition bnmul (z1 z2 : bignum) : bignum :=
 
 Lemma bnshiftE (z : bignum) (n : nat) :
   bn2nat (bnshift z n) = bn2nat z * (2^(n * (8 * size))).
-Proof. Admitted.
+Proof.
+induction z.
++ simpl.
+Admitted.
 
 (* 8. Prove that `dword_mul_with_carry` implements a double-word         *)
 (*    multiplication with carry, as stated below.                        *)
