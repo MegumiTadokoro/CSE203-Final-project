@@ -339,9 +339,14 @@ induction z.
   simpl.
   rewrite towordK // addn0.
   move => eql.
-  rewrite IHz // distributivitity.
+  rewrite IHz.
+  rewrite distributivitity.
   apply esym.
-  by rewrite -addnA // eql // (addnC result (carry*wsize)) // addnA.
+  rewrite -addnA.
+  rewrite eql.
+  rewrite (addnC result (carry*wsize)).
+  rewrite addnA.
+  exact.
 Defined.
 
 Fixpoint bnadd_aux (z1 z2 : bignum) (c : bool) : bignum :=
@@ -373,11 +378,17 @@ induction z1.
      move: (word_add_with_carry_correct a (inord 0) c).
      rewrite e.
      simpl.
-     rewrite bn_carry_correct // towordK // addn0.
+     rewrite bn_carry_correct.
+     rewrite towordK // addn0.
      move => eql.
-     rewrite distributivitity // add0n.
+     rewrite distributivitity.
+     rewrite add0n.
      apply esym.
-     by rewrite -addnA // eql // (addnC result (carry*wsize)) // addnA.
+     rewrite -addnA.
+     rewrite eql.
+     rewrite (addnC result (carry*wsize)).
+     rewrite addnA.
+     exact.
 + induction z2.
   ++ intros c.
      simpl.
@@ -385,12 +396,19 @@ induction z1.
      move: (word_add_with_carry_correct a (inord 0) c).
      rewrite e.
      simpl.
-     rewrite bn_carry_correct // towordK.
-     rewrite addnACl // add0n // addnC.
+     rewrite bn_carry_correct.
+     rewrite towordK.
+     rewrite addnACl.
+     rewrite add0n.
+     rewrite addnC.
      move => eql.
      rewrite distributivitity.
      apply esym.
-     rewrite addnACl // add0n // -addnACl // eql // addnCAC.
+     rewrite addnACl.
+     rewrite add0n.
+     rewrite -addnACl.
+     rewrite eql.
+     rewrite addnCAC.
      exact.
      exact.
   ++ intros c.
@@ -401,7 +419,12 @@ induction z1.
      simpl.
      rewrite IHz1.
      move => eql.
-     rewrite distributivitity // distributivitity // long_associativity_1 // eql // (addnC result (carry*wsize)) // long_associativity_2.
+     rewrite distributivitity.
+     rewrite distributivitity.
+     rewrite long_associativity_1.
+     rewrite eql.
+     rewrite (addnC result (carry*wsize)).
+     rewrite long_associativity_2.
      exact.
 Qed.
 
@@ -521,10 +544,6 @@ Proof.
 trivial.
 Qed.
 
-Axiom pow_sum :
-  forall (n:nat) (a:nat) (b:nat),
-    n^(a+b) = n^a * n^b.
-
 Lemma mulnK :
   forall (n:nat) (m:nat) (k:nat),
     m=k -> n*(m) = n*(k).
@@ -552,7 +571,8 @@ simpl.
   simpl.
   
   rewrite (mulSn (n) (8 * size)).
-  rewrite pow_sum.
+  (* Search (_^(_ + _)). *)
+  rewrite expnD.
   rewrite -mulnA.
   apply mulnK.
   apply mulnC.
@@ -566,7 +586,13 @@ Qed.
 
 (* Useful Inequalities *)
 
-Axiom subK : forall (n : nat) , n-n=0.
+Lemma subK : forall (n : nat) , n-n=0.
+Proof.
+induction n.
++ exact.
++ rewrite subSS.
+  apply IHn.
+Qed.
 
 Lemma dword_mul_ineq (w1 w2 : word) :
   let (_, w3) := dword_mul w1 w2 in 
