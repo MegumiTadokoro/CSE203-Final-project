@@ -513,9 +513,13 @@ Fixpoint bnmul (z1 z2 : bignum) : bignum :=
 
 (* 7. Prove the following arithmetical property about `bnshift`.         *)
 
-Axiom pow_0 :
+Lemma pow_0 :
   forall (n:nat),
     n^0 = 1.
+
+Proof.
+trivial.
+Qed.
 
 Axiom pow_sum :
   forall (n:nat) (a:nat) (b:nat),
@@ -559,26 +563,153 @@ Qed.
 (* 8. Prove that `dword_mul_with_carry` implements a double-word         *)
 (*    multiplication with carry, as stated below.                        *)
 
+
+(* Useful Inequalities *)
+
+Axiom subK : forall (n : nat) , n-n=0.
+
+Lemma dword_mul_ineq (w1 w2 : word) :
+  let (_, w3) := dword_mul w1 w2 in 
+    nat_of_ord w3 + 1 < wsize.
+
+Proof.
+
+move e : (dword_mul w1 w2) => [c w3].
+pose proof (dword_mul_correct w1 w2).
+rewrite e in H; destruct e.
+
+pose proof (ltn_nat_of_ord w1).
+pose proof (ltn_nat_of_ord w2).
+
+Admitted.
+
+Lemma word_add_with_carry_ineq (w : word):
+  (nat_of_ord w + 1 < wsize) ->
+  let: (c, _) := word_add_with_carry w (inord(1)) false in 
+    c = false.
+
+Proof.
+
+intros.
+move e : (word_add_with_carry w (inord 1) false) => [c w'].
+pose proof (word_add_with_carry_correct w (inord 1) false).
+rewrite e in H0.
+simpl in H0.
+rewrite addn0 in H0.
+rewrite inordK in H0.
+
+destruct c.
+
+simpl in H0.
+rewrite H0 in H.
+rewrite mul1n in H.
+rewrite addnC in H.
+
+Search (_+_ < _).
+rewrite -ltn_subRL in H.
+rewrite subK in H.
+contradict H.
+
+trivial.
+trivial.
+trivial.
+
+Qed.
+
 Lemma dword_mul_with_carry_correct (w1 w2 c : word) :
   let: (w'1, w'2) := dword_mul_with_carry w1 w2 c in
   bn2nat [:: w'1; w'2] = val w1 * val w2 + val c.
 Proof.
 
-simpl.
-rewrite mul0n.
 
 move e : (dword_mul_with_carry w1 w2 c) => [w'1 w'2].
 unfold dword_mul_with_carry in e.
 
-move : e.
-move e1 : (dword_mul w1 w2) => [w'3 w'4].
+move e1 : (dword_mul w1 w2) => [w''1 w''2] in e.
 
-case : (word_add_with_carry w'3 c false).
+pose proof (dword_mul_ineq w1 w2) as H_ineq1.
+rewrite e1 in H_ineq1.
 
-intros.
+pose proof (dword_mul_correct w1 w2) as H.
+rewrite e1 in H; destruct e1.
 
+pose proof (word_add_with_carry_correct w''1 c false).
+move e2 : (word_add_with_carry w''1 c false) => [c' w] in H0.
 
-Admitted.
+simpl in H0.
+rewrite addn0 in H0.
+
+rewrite e2 in e.
+destruct e2.
+
+simpl.
+rewrite mul0n.
+rewrite add0n.
+
+destruct c'.
+
+(*== Case 2 is easier to solve ==*)
+
+Focus 2.
+
+inversion e; destruct e.
+rewrite H3 in H.
+rewrite H2 in H0.
+
+rewrite H.
+
+simpl in H0.
+rewrite mul0n in H0.
+rewrite addn0 in H0.
+
+pose proof (addnC w''1 (w'2*wsize)).
+rewrite H1.
+
+pose proof (addnA (w'2 * wsize) w''1 c).
+rewrite -H4.
+rewrite H0.
+done.
+
+(*== Now we solve the other Case ==*)
+
+move e2 : (word_add_with_carry w''2 (inord 1) false)  => [c' w'''2] in e.
+
+pose proof (word_add_with_carry_ineq H_ineq1) as H_ineq2.
+rewrite e2 in H_ineq2.
+
+pose proof (word_add_with_carry_correct w''2 (inord 1) false).
+rewrite e2 in H1.
+
+inversion e; destruct e; destruct e2.
+
+rewrite H4 in H1.
+rewrite H3 in H0.
+
+rewrite H_ineq2 in H1.
+rewrite inordK in H1.
+simpl in H1.
+rewrite mul0n in H1.
+rewrite addn0 in H1.
+rewrite addn0 in H1.
+
+simpl in H0.
+rewrite mul1n in H0.
+
+(*== Solving the Equation ==*)
+
+rewrite H.
+rewrite (addnC w''1 (w''2*wsize)).
+rewrite -(addnA (w''2 * wsize) w''1 c).
+rewrite H0.
+rewrite addnA.
+
+rewrite -H1.
+ring.
+
+trivial.
+
+Qed.
+
 
 (* 9. Prove that `bnmul1` implements a bignum by word multiplication,    *)
 (*    as stated below.                                                   *)
