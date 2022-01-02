@@ -7,6 +7,8 @@ Unset Printing Implicit Defensive.
 
 Set Printing Coercions.
 
+(* Doan Dai Nguyen and Pedro Cabral *)
+
 (* --------------------------------------------------------------------- *)
 (* The goal of this project is to develop a minimal library for          *)
 (* arbitrary-precision arithmetic, also called bignums.                  *)
@@ -339,9 +341,14 @@ induction z.
   simpl.
   rewrite towordK // addn0.
   move => eql.
-  rewrite IHz // distributivitity.
+  rewrite IHz.
+  rewrite distributivitity.
   apply esym.
-  by rewrite -addnA // eql // (addnC result (carry*wsize)) // addnA.
+  rewrite -addnA.
+  rewrite eql.
+  rewrite (addnC result (carry*wsize)).
+  rewrite addnA.
+  exact.
 Defined.
 
 Fixpoint bnadd_aux (z1 z2 : bignum) (c : bool) : bignum :=
@@ -373,11 +380,17 @@ induction z1.
      move: (word_add_with_carry_correct a (inord 0) c).
      rewrite e.
      simpl.
-     rewrite bn_carry_correct // towordK // addn0.
+     rewrite bn_carry_correct.
+     rewrite towordK // addn0.
      move => eql.
-     rewrite distributivitity // add0n.
+     rewrite distributivitity.
+     rewrite add0n.
      apply esym.
-     by rewrite -addnA // eql // (addnC result (carry*wsize)) // addnA.
+     rewrite -addnA.
+     rewrite eql.
+     rewrite (addnC result (carry*wsize)).
+     rewrite addnA.
+     exact.
 + induction z2.
   ++ intros c.
      simpl.
@@ -385,12 +398,19 @@ induction z1.
      move: (word_add_with_carry_correct a (inord 0) c).
      rewrite e.
      simpl.
-     rewrite bn_carry_correct // towordK.
-     rewrite addnACl // add0n // addnC.
+     rewrite bn_carry_correct.
+     rewrite towordK.
+     rewrite addnACl.
+     rewrite add0n.
+     rewrite addnC.
      move => eql.
      rewrite distributivitity.
      apply esym.
-     rewrite addnACl // add0n // -addnACl // eql // addnCAC.
+     rewrite addnACl.
+     rewrite add0n.
+     rewrite -addnACl.
+     rewrite eql.
+     rewrite addnCAC.
      exact.
      exact.
   ++ intros c.
@@ -401,7 +421,12 @@ induction z1.
      simpl.
      rewrite IHz1.
      move => eql.
-     rewrite distributivitity // distributivitity // long_associativity_1 // eql // (addnC result (carry*wsize)) // long_associativity_2.
+     rewrite distributivitity.
+     rewrite distributivitity.
+     rewrite long_associativity_1.
+     rewrite eql.
+     rewrite (addnC result (carry*wsize)).
+     rewrite long_associativity_2.
      exact.
 Qed.
 
@@ -495,38 +520,326 @@ Definition dword_mul_with_carry (w1 w2 c : word) : word * word :=
   | false => (w1, w2)
   end.
 
-Definition bnmul1 (z : bignum) (w : word) : bignum :=
-  [::].
+Fixpoint bnmul1 (z:bignum) (w:word) : bignum := 
+  match z with
+  | nil => nil
+  | z0::z_rest =>
+    let: (res, c) := dword_mul z0 w in 
+      res :: (bnadd ([::c]) (bnmul1 z_rest w))
+  end.
 
-Definition bnmul (z1 z2 : bignum) : bignum :=
-  [::].
+
+Fixpoint bnmul (z1 z2 : bignum) : bignum :=
+  match z2 with
+  | nil => nil
+  | z2_0::z2_rest =>
+    bnadd (bnmul1 z1 z2_0) (bnshift (bnmul z1 z2_rest) 1)
+  end.
 
 (* 7. Prove the following arithmetical property about `bnshift`.         *)
+
+Lemma pow_0 :
+  forall (n:nat),
+    n^0 = 1.
+
+Proof.
+trivial.
+Qed.
+
+Lemma mulnK :
+  forall (n:nat) (m:nat) (k:nat),
+    m=k -> n*(m) = n*(k).
+Proof.
+  intros.
+  rewrite H.
+  done.
+Qed.
 
 Lemma bnshiftE (z : bignum) (n : nat) :
   bn2nat (bnshift z n) = bn2nat z * (2^(n * (8 * size))).
 Proof.
-induction z.
-+ simpl.
-Admitted.
+induction n.
+simpl.
+  rewrite mul0n.
+  rewrite pow_0.
+  rewrite muln1.
+  done.
+
+simpl.
+  rewrite towordK.
+  rewrite IHn.
+  rewrite addn0.
+  unfold wsize.
+  simpl.
+  
+  rewrite (mulSn (n) (8 * size)).
+  (* Search (_^(_ + _)). *)
+  rewrite expnD.
+  rewrite -mulnA.
+  apply mulnK.
+  apply mulnC.
+  apply gt0_wsize.
+
+Qed.
 
 (* 8. Prove that `dword_mul_with_carry` implements a double-word         *)
 (*    multiplication with carry, as stated below.                        *)
 
+
+(* Useful Inequalities *)
+
+Lemma subK : forall (n : nat) , n-n=0.
+Proof.
+induction n.
++ exact.
++ rewrite subSS.
+  apply IHn.
+Qed.
+
+Axiom nat_nonneg : forall (a b : nat) ,
+  a + b >= b.
+
+Axiom lt_nat : forall (a b : nat),
+  a < b -> a <= b-1.
+
+Axiom simple_ineq : forall (a b : nat),
+  a*b <= (b-1)*(b-1) -> a + 1 < b.
+
+Lemma dword_mul_ineq (w1 w2 : word) :
+  let (_, w3) := dword_mul w1 w2 in 
+    nat_of_ord w3 + 1 < wsize.
+
+Proof.
+
+move e : (dword_mul w1 w2) => [c w3].
+pose proof (dword_mul_correct w1 w2).
+rewrite e in H; destruct e.
+
+pose proof (ltn_nat_of_ord w1).
+pose proof (ltn_nat_of_ord w2).
+
+pose proof (lt_nat H0).
+pose proof (lt_nat H1).
+
+pose proof (nat_nonneg c (w3*wsize)) as H'.
+rewrite -H in H'.
+
+Search (_*_ <= _).
+
+pose proof (leq_mul H2 H3).
+
+Search (_ <= _ -> _ <= _).
+
+pose proof (leq_trans H' H4).
+
+apply simple_ineq in H5.
+done.
+
+Qed.
+
+
+Lemma word_add_with_carry_ineq (w : word):
+  (nat_of_ord w + 1 < wsize) ->
+  let: (c, _) := word_add_with_carry w (inord(1)) false in 
+    c = false.
+
+Proof.
+
+intros.
+move e : (word_add_with_carry w (inord 1) false) => [c w'].
+pose proof (word_add_with_carry_correct w (inord 1) false).
+rewrite e in H0.
+simpl in H0.
+rewrite addn0 in H0.
+rewrite inordK in H0.
+
+destruct c.
+
+simpl in H0.
+rewrite H0 in H.
+rewrite mul1n in H.
+rewrite addnC in H.
+
+Search (_+_ < _).
+rewrite -ltn_subRL in H.
+rewrite subK in H.
+contradict H.
+
+trivial.
+trivial.
+trivial.
+
+Qed.
+
 Lemma dword_mul_with_carry_correct (w1 w2 c : word) :
   let: (w'1, w'2) := dword_mul_with_carry w1 w2 c in
   bn2nat [:: w'1; w'2] = val w1 * val w2 + val c.
-Proof. Admitted.
+Proof.
+
+
+move e : (dword_mul_with_carry w1 w2 c) => [w'1 w'2].
+unfold dword_mul_with_carry in e.
+
+move e1 : (dword_mul w1 w2) => [w''1 w''2] in e.
+
+pose proof (dword_mul_ineq w1 w2) as H_ineq1.
+rewrite e1 in H_ineq1.
+
+pose proof (dword_mul_correct w1 w2) as H.
+rewrite e1 in H; destruct e1.
+
+pose proof (word_add_with_carry_correct w''1 c false).
+move e2 : (word_add_with_carry w''1 c false) => [c' w] in H0.
+
+simpl in H0.
+rewrite addn0 in H0.
+
+rewrite e2 in e.
+destruct e2.
+
+simpl.
+rewrite mul0n.
+rewrite add0n.
+
+destruct c'.
+
+(*== Case 2 is easier to solve ==*)
+
+Focus 2.
+
+inversion e; destruct e.
+rewrite H3 in H.
+rewrite H2 in H0.
+
+rewrite H.
+
+simpl in H0.
+rewrite mul0n in H0.
+rewrite addn0 in H0.
+
+pose proof (addnC w''1 (w'2*wsize)).
+rewrite H1.
+
+pose proof (addnA (w'2 * wsize) w''1 c).
+rewrite -H4.
+rewrite H0.
+done.
+
+(*== Now we solve the other Case ==*)
+
+move e2 : (word_add_with_carry w''2 (inord 1) false)  => [c' w'''2] in e.
+
+pose proof (word_add_with_carry_ineq H_ineq1) as H_ineq2.
+rewrite e2 in H_ineq2.
+
+pose proof (word_add_with_carry_correct w''2 (inord 1) false).
+rewrite e2 in H1.
+
+inversion e; destruct e; destruct e2.
+
+rewrite H4 in H1.
+rewrite H3 in H0.
+
+rewrite H_ineq2 in H1.
+rewrite inordK in H1.
+simpl in H1.
+rewrite mul0n in H1.
+rewrite addn0 in H1.
+rewrite addn0 in H1.
+
+simpl in H0.
+rewrite mul1n in H0.
+
+(*== Solving the Equation ==*)
+
+rewrite H.
+rewrite (addnC w''1 (w''2*wsize)).
+rewrite -(addnA (w''2 * wsize) w''1 c).
+rewrite H0.
+rewrite addnA.
+
+rewrite -H1.
+ring.
+
+trivial.
+
+Qed.
+
 
 (* 9. Prove that `bnmul1` implements a bignum by word multiplication,    *)
 (*    as stated below.                                                   *)
 
+Lemma mulDn :
+  forall (a:nat) (b:nat) (c:nat) ,
+    (a+b)*c = a*c + b*c.
+Proof.
+intros; ring.
+Qed.
+
+Lemma mulnD:
+  forall (a:nat) (b:nat) (c:nat) ,
+    a*(b+c) = a*b + a*c.
+Proof.
+intros; ring.
+Qed.
+
 Lemma bnmul1_correct (z : bignum) (w : word) :
   bn2nat (bnmul1 z w) = bn2nat z * val w.
-Proof. Admitted.
+Proof.
+
+simpl.
+move : w.
+induction z.
+
+intros; simpl.
+rewrite mul0n; done.
+
+intros; simpl.
+move e : (dword_mul a w) => [res c].
+simpl.
+
+rewrite bnadd_correct.
+simpl.
+rewrite mul0n.
+rewrite add0n.
+rewrite IHz.
+
+pose proof (dword_mul_correct a w).
+rewrite e in H.
+
+rewrite mulDn.
+rewrite (mulDn (bn2nat z * wsize) a w).
+
+rewrite H.
+ring.
+
+Qed.
 
 (* 10. Prove the correctness of `bnmul`, as stated below.                *)
 
 Lemma bnmul_correct (z1 z2 : bignum) :
   bn2nat (bnmul z1 z2) = bn2nat z1 * bn2nat z2.
-Proof. Admitted.
+Proof.
+move : z1.
+induction z2.
+  
+intros.
+simpl.
+rewrite muln0.
+done.
+
+intros.
+simpl.
+rewrite bnadd_correct.
+rewrite bnmul1_correct.
+simpl.
+
+rewrite IHz2.
+rewrite inordK.
+
+rewrite addn0.
+ring.
+
+trivial.
+
+Qed.
